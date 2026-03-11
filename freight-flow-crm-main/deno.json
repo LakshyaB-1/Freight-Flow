@@ -1,0 +1,29 @@
+{
+  "imports": {
+    "std/": "https://deno.land/std@0.208.0/",
+    "@supabase/": "https://esm.sh/@supabase/",
+    "oak": "https://deno.land/x/oak@v12.6.1/mod.ts"
+  },
+  "tasks": {
+    "start": "deno run --allow-net --allow-env supabase/functions/ai-assistant/index.ts",
+    "test": "deno test --allow-net --allow-env --allow-read"
+  },
+  "lint": {
+    "rules": {
+      "tags": [
+        "recommended"
+      ]
+    }
+  },
+  "fmt": {
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve",
+    "indentWidth": 2
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build"
+  ]
+}
