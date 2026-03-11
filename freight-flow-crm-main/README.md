@@ -1,154 +1,208 @@
-# 🚢✈️ Freight Flow CRM
+# Freight Flow CRM 🚚
 
-> A purpose-built Customer Relationship Management system for **Freight Link Logistics Systems** — managing sea & air freight operations, client pipelines, and shipment workflows from a single dashboard.
+Freight Flow CRM is a modern logistics management platform designed for freight forwarders and logistics teams to manage shipments, track milestones, and automate communication with clients.
 
-## 📌 Overview
-
-**Freight Flow CRM** is the internal operations platform for [Freight Link Logistics Systems](https://freight-link-logistics-systems.vercel.app/), a sea and air freight forwarding company based in India. The CRM centralizes client management, shipment tracking, quotations, and documentation — replacing scattered spreadsheets and email threads with a single, streamlined interface.
+The system provides a centralized dashboard for tracking shipments, monitoring operational progress, and generating AI-powered logistics insights.
 
 ---
 
 ## 🚀 Features
 
-- **👥 Client & Lead Management** — Track importers, exporters, and freight agents through the full sales pipeline
-- **📦 Shipment Tracking** — Monitor FCL, LCL, and air cargo consignments with real-time status updates
-- **📋 Quotations & Bookings** — Create and manage freight quotes, convert to confirmed job orders
-- **🧾 Invoicing** — Generate GST-compliant invoices and track payment status
-- **📁 Document Management** — Store Bills of Lading, Airway Bills, and customs documents centrally
-- **📊 Dashboard & Reports** — Visual KPIs for shipment volume, revenue, and client activity
-- **🔔 Alerts & Follow-ups** — Automated reminders for shipment milestones and pending payments
+### 📦 Shipment Management
+
+* Create and manage shipment records
+* Track consignee, shipper, commodity, container numbers, and BE numbers
+* View shipment status (Pending, In Progress, Completed)
+
+### 📍 Milestone Tracking
+
+* Track shipment milestones
+* Monitor shipment progress across different stages
+* Maintain operational notes and updates
+
+### 🤖 AI Logistics Assistant
+
+Powered by OpenAI, the AI assistant can:
+
+* Summarize shipment statuses
+* Generate logistics insights
+* Draft professional customer emails
+* Suggest operational next steps
+* Highlight delayed shipments
+
+### 🔐 Secure Authentication
+
+* User authentication via Supabase
+* Role-based access to shipment data
+* Secure API endpoints
+
+### 📊 Dashboard Analytics
+
+* Shipment statistics
+* Pending vs completed shipment insights
+* Operational overview for logistics teams
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠 Tech Stack
 
-| Technology | Purpose |
-|---|---|
-| [React 18](https://react.dev/) | UI framework |
-| [TypeScript](https://www.typescriptlang.org/) | Type-safe development |
-| [Vite](https://vitejs.dev/) | Build tool & dev server |
-| [Tailwind CSS](https://tailwindcss.com/) | Utility-first styling |
-| [shadcn/ui](https://ui.shadcn.com/) | Component library |
-| [Lovable](https://lovable.dev/) | AI-powered development & hosting |
+**Frontend**
+
+* React
+* TypeScript
+* Tailwind CSS
+* Vite
+
+**Backend**
+
+* Supabase
+* Supabase Edge Functions
+
+**AI Integration**
+
+* OpenAI API (GPT)
+
+**Authentication**
+
+* Supabase Auth
 
 ---
 
 ## 📁 Project Structure
 
 ```
-freight-flow-crm/
-├── public/               # Static assets
-├── src/
-│   ├── components/       # Reusable UI components
-│   │   └── ui/           # shadcn/ui base components
-│   ├── pages/            # Route-level page components
-│   ├── hooks/            # Custom React hooks
-│   ├── lib/              # Utility functions
-│   └── types/            # TypeScript type definitions
-├── index.html
-├── tailwind.config.ts
-├── vite.config.ts
-├── tsconfig.json
-└── package.json
+freight-flow-crm
+│
+├── src
+│   ├── components
+│   ├── pages
+│   ├── hooks
+│   ├── integrations
+│   └── lib
+│
+├── supabase
+│   └── functions
+│       └── ai-assistant
+│           └── index.ts
+│
+├── public
+├── package.json
+└── README.md
 ```
 
 ---
 
-## ⚙️ Local Development
+## ⚙️ Installation
 
-### Prerequisites
+### 1️⃣ Clone the repository
 
-- **Node.js** `v18+` — [Install via nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-- **npm** `v9+`
+```
+git clone https://github.com/YOUR-USERNAME/freight-flow-crm.git
+cd freight-flow-crm
+```
 
-### Setup
+---
 
-```sh
-# 1. Clone the repository
-git clone <YOUR_GIT_URL>
+### 2️⃣ Install dependencies
 
-# 2. Navigate into the project
-cd <YOUR_PROJECT_NAME>
-
-# 3. Install dependencies
+```
 npm install
+```
 
-# 4. Start the development server
+---
+
+### 3️⃣ Setup environment variables
+
+Create a `.env` file in the root folder:
+
+```
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+OPENAI_API_KEY=your_openai_api_key
+```
+
+---
+
+### 4️⃣ Run the project locally
+
+```
 npm run dev
 ```
 
-The app will be available at `http://localhost:8080` with hot-reloading enabled.
+Open:
 
-### Other Commands
-
-```sh
-npm run build        # Production build
-npm run preview      # Preview production build locally
-npm run lint         # Run ESLint
+```
+http://localhost:5173
 ```
 
 ---
 
-## ✏️ Ways to Edit This Project
+## ⚡ Supabase Edge Functions
 
-### Option 1 — Lovable (Recommended)
+The project uses Supabase Edge Functions for AI features.
 
-Visit the [Lovable Project Dashboard](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and use the AI prompt interface. All changes are automatically committed to this repository.
+Deploy the AI assistant:
 
-### Option 2 — Local IDE
-
-Clone the repo and push changes directly. Any push to `main` is reflected in Lovable automatically.
-
-### Option 3 — GitHub Web Editor
-
-1. Navigate to the file you want to edit on GitHub
-2. Click the **pencil icon** (Edit file) in the top right
-3. Make your changes and commit
-
-### Option 4 — GitHub Codespaces
-
-1. Go to the repo's main page on GitHub
-2. Click **Code** → **Codespaces** → **New codespace**
-3. Edit files in the browser-based VS Code environment and commit when done
+```
+npx supabase functions deploy ai-assistant
+```
 
 ---
 
-## 🚀 Deployment
+## 🔑 Environment Variables
 
-This project is deployed and hosted via **Lovable**.
+| Variable               | Description          |
+| ---------------------- | -------------------- |
+| VITE_SUPABASE_URL      | Supabase project URL |
+| VITE_SUPABASE_ANON_KEY | Public Supabase key  |
+| OPENAI_API_KEY         | OpenAI API key       |
 
-To publish:
-1. Open the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID)
-2. Click **Share** → **Publish**
+---
 
-### Custom Domain
+## 🧠 AI Assistant Capabilities
 
-To connect a custom domain:
-1. Go to **Project → Settings → Domains**
-2. Click **Connect Domain** and follow the steps
+The AI assistant can:
 
-📖 [Custom domain setup guide](https://docs.lovable.dev/features/custom-domain#custom-domain)
+* Analyze shipment data
+* Generate shipment summaries
+* Provide logistics insights
+* Draft customer communication
+* Suggest operational actions
+
+---
+
+## 📈 Future Improvements
+
+* Automated shipment delay detection
+* Email automation for shipment updates
+* Real-time shipment notifications
+* Advanced analytics dashboard
+* Multi-user collaboration
+* Mobile application
 
 ---
 
 ## 🤝 Contributing
 
-1. Create a feature branch: `git checkout -b feature/your-feature`
-2. Commit your changes: `git commit -m "feat: describe your change"`
-3. Push and open a Pull Request: `git push origin feature/your-feature`
+Contributions are welcome.
 
-Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages.
-
----
-
-## 🏢 About
-
-**Freight Link Logistics Systems** is a freight forwarding company specializing in sea and air cargo from India.
-
-🌐 [freight-link-logistics-systems.vercel.app](https://freight-link-logistics-systems.vercel.app/)
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Submit a pull request
 
 ---
 
 ## 📄 License
 
-Private — All rights reserved © Freight Link Logistics Systems
+This project is licensed under the MIT License.
+
+---
+
+## 👨‍💻 Author
+
+**Lakshya Bhatt**
+
+Built as a logistics technology project to simplify freight forwarding operations.
+
+---
