@@ -14,7 +14,7 @@ const mapRowToShipment = (row: any): Shipment => ({
   shipper: row.shipper,
   commodity: row.commodity,
   containerNo: row.container_no,
-  containerSize: row.container_size,
+ containerSize: row.container_size ? row.container_size.replace("'", '') : null,
   shippingLine: row.shipping_line,
   type: row.type,
   forwarder: row.forwarder,
@@ -42,7 +42,7 @@ const mapFormToRow = (data: ShipmentFormData | Partial<ShipmentFormData>, userId
   if (data.shipper !== undefined) row.shipper = data.shipper;
   if (data.commodity !== undefined) row.commodity = data.commodity;
   if (data.containerNo !== undefined) row.container_no = data.containerNo || null;
-  if (data.containerSize !== undefined) row.container_size = data.containerSize || null;
+  if (data.containerSize !== undefined) row.container_size = data.containerSize ? `${data.containerSize}'` : null;
   if (data.shippingLine !== undefined) row.shipping_line = data.shippingLine || null;
   if (data.type !== undefined) row.type = data.type || null;
   if (data.forwarder !== undefined) row.forwarder = data.forwarder || null;
