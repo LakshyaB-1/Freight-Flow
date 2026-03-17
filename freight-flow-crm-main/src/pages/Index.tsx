@@ -20,7 +20,18 @@ import CustomerManager from '@/components/CustomerManager';
 import TaskManager from '@/components/TaskManager';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Package, Clock, CheckCircle2, Container, Plus, Loader2, FileSpreadsheet,
-  ChevronDown, BarChart3, Users, Search, Sparkles, UserCircle, ListTodo,
+  ChevronDown, BarChart3, Users, Search, Sparkles, UserCircle, ListTodo, Trash2,
 } from 'lucide-react';
 import oceanShip from '@/assets/ocean-ship.jpg';
 
@@ -47,6 +58,8 @@ const Index = () => {
   const [editingShipment, setEditingShipment] = useState<Shipment | undefined>(undefined);
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('shipments');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
 
   const handleShowTutorial = useCallback(() => setShowTutorial(true), []);
@@ -86,10 +99,30 @@ const Index = () => {
     setEditingShipment(undefined);
     setFormOpen(false);
   };
-  const handleDelete = async (id: string) => { await deleteShipment(id); };
+  const handleDelete = async (id: string) => { await deleteShipment(id); setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; }); };
   const handleEdit = (shipment: Shipment) => { setEditingShipment(shipment); setFormOpen(true); };
   const handleView = (shipment: Shipment) => { setSelectedShipment(shipment); setDetailsOpen(true); };
   const handleFormClose = (open: boolean) => { setFormOpen(open); if (!open) setEditingShipment(undefined); };
+
+   const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const handleToggleSelectAll = () => {
+    const allIds = filteredShipments.map(s => s._id || s.id || '').filter(Boolean);
+    const allSelected = allIds.every(id => selectedIds.has(id));
+    setSelectedIds(allSelected ? new Set() : new Set(allIds));
+  };
+  const handleBulkDelete = async () => {
+    for (const id of selectedIds) {
+      await deleteShipment(id);
+    }
+    setSelectedIds(new Set());
+    setDeleteDialogOpen(false);
+  };
 
   if (authLoading || shipmentsLoading || roleLoading) {
     return (
@@ -186,16 +219,39 @@ const Index = () => {
           </div>
 
           <TabsContent value="shipments" className="mt-6 space-y-4">
-            <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-              <TabsList className="bg-muted">
-                <TabsTrigger value="ALL">All</TabsTrigger>
-                <TabsTrigger value="PENDING">Pending</TabsTrigger>
-                <TabsTrigger value="DONE">Completed</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex items-center justify-between gap-4">
+              <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+                <TabsList className="bg-muted">
+                  <TabsTrigger value="ALL">All</TabsTrigger>
+                  <TabsTrigger value="PENDING">Pending</TabsTrigger>
+                  <TabsTrigger value="DONE">Completed</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete {selectedIds.size} selected
+                </Button>
+              )}
+            </div>
+
 
             {isMobile ? (
               <div className="space-y-4">
+                {filteredShipments.length > 0 && (
+                  <div className="flex items-center gap-2 px-1">
+                    <Checkbox
+                      checked={filteredShipments.length > 0 && filteredShipments.every(s => selectedIds.has(s._id || s.id || ''))}
+                      onCheckedChange={handleToggleSelectAll}
+                    />
+                    <span className="text-sm text-muted-foreground">Select all</span>
+                  </div>
+                )}
                 {filteredShipments.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <Container className="h-12 w-12 mb-4 opacity-50" />
@@ -204,12 +260,28 @@ const Index = () => {
                   </div>
                 ) : (
                   filteredShipments.map((shipment: Shipment) => (
-                    <MobileShipmentCard key={shipment._id || shipment.id} shipment={shipment} onView={handleView} onEdit={handleEdit} onDelete={handleDelete} />
+                     <MobileShipmentCard
+                      key={shipment._id || shipment.id}
+                      shipment={shipment}
+                      onView={handleView}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      isSelected={selectedIds.has(shipment._id || shipment.id || '')}
+                      onToggleSelect={handleToggleSelect}
+                    />
                   ))
                 )}
               </div>
             ) : (
-              <ShipmentTable shipments={filteredShipments} onEdit={handleEdit} onDelete={handleDelete} onView={handleView} />
+               <ShipmentTable
+                shipments={filteredShipments}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onView={handleView}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onToggleSelectAll={handleToggleSelectAll}
+              />
             )}
           </TabsContent>
 
@@ -243,6 +315,22 @@ const Index = () => {
       <ExcelImport open={excelImportOpen} onOpenChange={setExcelImportOpen} onImport={handleImportShipments} />
       <AIAssistantPanel shipmentId={selectedShipment?.id || selectedShipment?._id} />
       <OnboardingTutorial forceShow={showTutorial} onComplete={() => setShowTutorial(false)} />
+         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to delete {selectedIds.size} shipment{selectedIds.size > 1 ? 's' : ''}. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </WebsiteLayout>
   );
 };

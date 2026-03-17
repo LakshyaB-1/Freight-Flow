@@ -1,6 +1,7 @@
 import { Shipment } from '@/types/shipment';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -17,15 +18,26 @@ interface ShipmentTableProps {
   onEdit: (shipment: Shipment) => void;
   onDelete: (id: string) => void;
   onView: (shipment: Shipment) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectAll: () => void;
 }
 
-const ShipmentTable = ({ shipments, onEdit, onDelete, onView }: ShipmentTableProps) => {
+const ShipmentTable = ({ shipments, onEdit, onDelete, onView, selectedIds, onToggleSelect, onToggleSelectAll }: ShipmentTableProps) => {
+  const allSelected = shipments.length > 0 && shipments.every(s => selectedIds.has(s._id || s.id || ''));
+
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
+             <TableHead className="w-10">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={onToggleSelectAll}
+                />
+              </TableHead>
               <TableHead className="font-semibold">Date</TableHead>
               <TableHead className="font-semibold">BL Date</TableHead>
               <TableHead className="font-semibold">Consignee</TableHead>
@@ -43,13 +55,20 @@ const ShipmentTable = ({ shipments, onEdit, onDelete, onView }: ShipmentTablePro
           </TableHeader>
           <TableBody>
             {shipments.map((shipment, index) => {
-              const shipmentId = shipment._id || shipment.id;
+              const shipmentId = shipment._id || shipment.id || '';
+              const isSelected = selectedIds.has(shipmentId);
               return (
               <TableRow 
                 key={shipmentId}
-                className="animate-fade-in"
+                className={cn("animate-fade-in", isSelected && "bg-primary/5")}
                 style={{ animationDelay: `${index * 50}ms` }}
               >
+                <TableCell>
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onToggleSelect(shipmentId)}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">{shipment.date}</TableCell>
                 <TableCell>{shipment.blDate}</TableCell>
                 <TableCell className="max-w-[150px] truncate" title={shipment.consignee}>

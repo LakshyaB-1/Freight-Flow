@@ -2,6 +2,7 @@ import { Shipment } from '@/types/shipment';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Eye, Edit, Trash2, Container, Calendar, Building2, Package, Plane, Ship } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -10,14 +11,23 @@ interface MobileShipmentCardProps {
   onView: (shipment: Shipment) => void;
   onEdit: (shipment: Shipment) => void;
   onDelete: (id: string) => void;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-const MobileShipmentCard = ({ shipment, onView, onEdit, onDelete }: MobileShipmentCardProps) => {
+const MobileShipmentCard = ({ shipment, onView, onEdit, onDelete, isSelected, onToggleSelect }: MobileShipmentCardProps) => {
   const shipmentId = shipment._id || shipment.id || '';
   return (
-    <Card className="overflow-hidden">
+    <Card className={cn("overflow-hidden", isSelected && "ring-2 ring-primary/30")}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
+          {onToggleSelect && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onToggleSelect(shipmentId)}
+              className="mt-1"
+            />
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Container className="h-4 w-4 text-primary shrink-0" />
