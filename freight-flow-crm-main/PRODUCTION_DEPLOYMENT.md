@@ -174,7 +174,7 @@ PORT=5000
 NODE_ENV=development
 
 # MongoDB Atlas Connection
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/freight-link?retryWrites=true&w=majority
+MONGODB_URI=<your-mongodb-uri-here>
 
 # JWT Configuration
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
