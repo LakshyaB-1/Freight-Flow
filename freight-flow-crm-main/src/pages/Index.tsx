@@ -43,10 +43,12 @@ import {
   ChevronDown, BarChart3, Users, Search, Sparkles, UserCircle, ListTodo, Trash2,
 } from 'lucide-react';
 import oceanShip from '@/assets/ocean-ship.jpg';
-
+const TabFallback = () => (
+  <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+);
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
-  const { shipments, loading: shipmentsLoading, addShipment, updateShipment, deleteShipment } = useShipments();
+  const { shipments, loading: shipmentsLoading, addShipment, updateShipment, deleteShipment } = useShipments(); useShipments();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const isMobile = useIsMobile();
 
@@ -91,7 +93,9 @@ const Index = () => {
   }, [shipments, searchTerm, statusFilter]);
 
   const handleAddShipment = async (data: ShipmentFormData) => { await addShipment(data); setFormOpen(false); };
-  const handleImportShipments = async (importedShipments: ShipmentFormData[]) => { for (const s of importedShipments) await addShipment(s); };
+  const handleImportShipments = async (importedShipments: ShipmentFormData[], onProgress?: (done: number, total: number) => void) => {
+    await bulkAddShipments(importedShipments, onProgress);
+  };
   const handleEditShipment = async (data: ShipmentFormData) => {
     if (!editingShipment) return;
     const id = editingShipment._id || editingShipment.id;
@@ -117,11 +121,10 @@ const Index = () => {
     setSelectedIds(allSelected ? new Set() : new Set(allIds));
   };
   const handleBulkDelete = async () => {
-    for (const id of selectedIds) {
-      await deleteShipment(id);
-    }
+     const ids = Array.from(selectedIds);
     setSelectedIds(new Set());
     setDeleteDialogOpen(false);
+    await bulkDeleteShipments(ids);
   };
 
   if (authLoading || shipmentsLoading || roleLoading) {
@@ -286,24 +289,24 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="customers" className="mt-6">
-            <CustomerManager />
+            <Suspense fallback={<TabFallback />}><CustomerManager /></Suspense>
           </TabsContent>
 
           <TabsContent value="tasks" className="mt-6">
-            <TaskManager />
+           <Suspense fallback={<TabFallback />}><TaskManager /></Suspense>
           </TabsContent>
 
           <TabsContent value="insights" className="mt-6">
-            <InsightsDashboard shipments={shipments} />
+             <Suspense fallback={<TabFallback />}><InsightsDashboard shipments={shipments} /></Suspense>
           </TabsContent>
 
           <TabsContent value="reports" className="mt-6">
-            <ReportsAnalytics shipments={shipments} />
+            <Suspense fallback={<TabFallback />}><ReportsAnalytics shipments={shipments} /></Suspense>
           </TabsContent>
 
           {isAdmin && (
             <TabsContent value="users" className="mt-6">
-              <AdminUserManagement />
+               <Suspense fallback={<TabFallback />}><AdminUserManagement /></Suspense>
             </TabsContent>
           )}
         </Tabs>
@@ -313,8 +316,8 @@ const Index = () => {
       <ShipmentForm open={formOpen} onOpenChange={handleFormClose} onSubmit={editingShipment ? handleEditShipment : handleAddShipment} initialData={editingShipment} />
       <ShipmentDetails shipment={selectedShipment} open={detailsOpen} onOpenChange={setDetailsOpen} />
       <ExcelImport open={excelImportOpen} onOpenChange={setExcelImportOpen} onImport={handleImportShipments} />
-      <AIAssistantPanel shipmentId={selectedShipment?.id || selectedShipment?._id} />
-      <OnboardingTutorial forceShow={showTutorial} onComplete={() => setShowTutorial(false)} />
+     <Suspense fallback={null}><AIAssistantPanel shipmentId={selectedShipment?.id || selectedShipment?._id} /></Suspense>
+      <Suspense fallback={null}><OnboardingTutorial forceShow={showTutorial} onComplete={() => setShowTutorial(false)} /></Suspense>
          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

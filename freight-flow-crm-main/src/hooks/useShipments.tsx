@@ -1,9 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback,useref } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Shipment, ShipmentFormData } from '@/types/shipment';
 import { toast } from 'sonner';
+
+const BULK_BATCH_SIZE = 200; // Supabase recommends ≤500 rows per insert
 
 // Map DB row (snake_case) to frontend Shipment (camelCase)
 const mapRowToShipment = (row: any): Shipment => ({
@@ -176,6 +178,57 @@ export const useShipments = () => {
     [data, updateMutation]
   );
 
+  // Bulk insert for Excel import — batched with progress callback
+  const bulkAddShipments = useCallback(
+    async (
+      shipments: ShipmentFormData[],
+      onProgress?: (done: number, total: number) => void,
+    ) => {
+      if (!user) throw new Error('Not authenticated');
+      const rows = shipments.map((s) => mapFormToRow(s, user.id));
+      const total = rows.length;
+      let inserted = 0;
+      const errors: { batch: number; message: string }[] = [];
+      for (let i = 0; i < total; i += BULK_BATCH_SIZE) {
+        const batch = rows.slice(i, i + BULK_BATCH_SIZE);
+        const { error } = await supabase.from('shipments').insert(batch);
+        if (error) {
+          errors.push({ batch: Math.floor(i / BULK_BATCH_SIZE) + 1, message: error.message });
+        } else {
+          inserted += batch.length;
+        }
+        onProgress?.(Math.min(i + batch.length, total), total);
+      }
+      queryClient.invalidateQueries({ queryKey: ['shipments'] });
+      if (errors.length > 0) {
+        toast.error(`${errors.length} batch(es) failed. ${inserted}/${total} shipments imported.`);
+      } else {
+        toast.success(`All ${inserted} shipments imported successfully`);
+      }
+      return { inserted, errors };
+    },
+    [user, queryClient],
+  );
+  // Bulk delete — single query with IN filter
+  const bulkDeleteShipments = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      // Optimistic update: remove from cache immediately
+      queryClient.setQueryData(['shipments'], (old: Shipment[] | undefined) =>
+        old ? old.filter((s) => !ids.includes(s.id || '')) : [],
+      );
+      const { error } = await supabase.from('shipments').delete().in('id', ids);
+      if (error) {
+        toast.error('Failed to delete shipments: ' + error.message);
+        queryClient.invalidateQueries({ queryKey: ['shipments'] }); // rollback
+      } else {
+        toast.success(`${ids.length} shipment(s) deleted`);
+        queryClient.invalidateQueries({ queryKey: ['shipments'] });
+      }
+    },
+    [queryClient],
+  );
+
   return {
     shipments: data || [],
     loading: isLoading,
@@ -186,6 +239,8 @@ export const useShipments = () => {
     updateShipment,
     deleteShipment,
     toggleStatus,
+    bulkAddShipments,
+    bulkDeleteShipments,
     refetch,
   };
 };

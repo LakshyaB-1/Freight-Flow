@@ -10,7 +10,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, FileSpreadsheet, Check, X } from 'lucide-react';
+import { Upload, FileSpreadsheet, Check, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ExcelImportProps {
@@ -488,18 +488,36 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
                   </table>
                 </div>
               </div>
-
+  {importing && progress && (
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      Uploading {progress.done}/{progress.total} shipments…
+                    </span>
+                    <span className="font-medium">{Math.round((progress.done / progress.total) * 100)}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300 rounded-full"
+                      style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" onClick={handleClose}>
+               <Button variant="outline" onClick={handleClose} disabled={importing}>
                   Cancel
                 </Button>
                 <Button
                   onClick={handleImport}
-                  disabled={validCount === 0}
+                  disabled={validCount === 0 || importing}
                   className="gap-2"
                 >
-                  <Check className="h-4 w-4" />
-                  Import {validCount} Shipment{validCount !== 1 ? 's' : ''}
+                 {importing ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" />Importing…</>
+                  ) : (
+                    <><Check className="h-4 w-4" />Import {validCount} Shipment{validCount !== 1 ? 's' : ''}</>
+                  )}
                 </Button>
               </div>
             </>
