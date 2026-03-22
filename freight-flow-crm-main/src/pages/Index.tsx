@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Shipment, ShipmentFormData } from '@/types/shipment';
 import { useAuth } from '@/contexts/AuthContext';
 import { useShipments } from '@/hooks/useShipments';
@@ -11,13 +11,6 @@ import ShipmentForm from '@/components/ShipmentForm';
 import ShipmentDetails from '@/components/ShipmentDetails';
 import ExcelImport from '@/components/ExcelImport';
 import MobileShipmentCard from '@/components/MobileShipmentCard';
-import ReportsAnalytics from '@/components/ReportsAnalytics';
-import AdminUserManagement from '@/components/AdminUserManagement';
-import InsightsDashboard from '@/components/InsightsDashboard';
-import AIAssistantPanel from '@/components/AIAssistantPanel';
-import OnboardingTutorial from '@/components/OnboardingTutorial';
-import CustomerManager from '@/components/CustomerManager';
-import TaskManager from '@/components/TaskManager';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -43,12 +36,21 @@ import {
   ChevronDown, BarChart3, Users, Search, Sparkles, UserCircle, ListTodo, Trash2,
 } from 'lucide-react';
 import oceanShip from '@/assets/ocean-ship.jpg';
+
+// Lazy load components
+const ReportsAnalytics = lazy(() => import('@/components/ReportsAnalytics'));
+const AdminUserManagement = lazy(() => import('@/components/AdminUserManagement'));
+const InsightsDashboard = lazy(() => import('@/components/InsightsDashboard'));
+const AIAssistantPanel = lazy(() => import('@/components/AIAssistantPanel'));
+const OnboardingTutorial = lazy(() => import('@/components/OnboardingTutorial'));
+const CustomerManager = lazy(() => import('@/components/CustomerManager'));
+const TaskManager = lazy(() => import('@/components/TaskManager'));
 const TabFallback = () => (
   <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
 );
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
-  const { shipments, loading: shipmentsLoading, addShipment, updateShipment, deleteShipment } = useShipments(); useShipments();
+  const { shipments, loading: shipmentsLoading, addShipment, updateShipment, deleteShipment } = useShipments();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const isMobile = useIsMobile();
 
@@ -94,7 +96,10 @@ const Index = () => {
 
   const handleAddShipment = async (data: ShipmentFormData) => { await addShipment(data); setFormOpen(false); };
   const handleImportShipments = async (importedShipments: ShipmentFormData[], onProgress?: (done: number, total: number) => void) => {
-    await bulkAddShipments(importedShipments, onProgress);
+    for (let i = 0; i < importedShipments.length; i++) {
+      await addShipment(importedShipments[i]);
+      onProgress?.(i + 1, importedShipments.length);
+    }
   };
   const handleEditShipment = async (data: ShipmentFormData) => {
     if (!editingShipment) return;
@@ -124,7 +129,9 @@ const Index = () => {
      const ids = Array.from(selectedIds);
     setSelectedIds(new Set());
     setDeleteDialogOpen(false);
-    await bulkDeleteShipments(ids);
+    for (const id of ids) {
+      await deleteShipment(id);
+    }
   };
 
   if (authLoading || shipmentsLoading || roleLoading) {
