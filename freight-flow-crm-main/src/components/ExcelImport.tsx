@@ -32,7 +32,7 @@ const worksheetToJson = (worksheet: ExcelJS.Worksheet): Record<string, unknown>[
   const headers: string[] = [];
   
   headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-    headers[colNumber] = String(cell.value || '').trim();
+    headers[colNumber - 1] = String(cell.value || '').trim(); // Adjust for 0-based indexing
   });
 
   worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -40,7 +40,7 @@ const worksheetToJson = (worksheet: ExcelJS.Worksheet): Record<string, unknown>[
     const obj: Record<string, unknown> = {};
     let hasValue = false;
     row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      const header = headers[colNumber];
+      const header = headers[colNumber - 1]; // Adjust for 0-based indexing
       if (header) {
         obj[header] = cell.value;
         hasValue = true;
@@ -57,6 +57,8 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const processFile = (file: File) => {
     if (!file) return;
@@ -352,15 +354,27 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
     }
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     const validShipments = parsedData.filter(row => row.valid).map(row => row.data);
     if (validShipments.length === 0) {
       toast.error('No valid shipments to import');
       return;
     }
-    onImport(validShipments);
-    handleClose();
-    toast.success(`Successfully imported ${validShipments.length} shipment(s)`);
+
+    setImporting(true);
+    setProgress({ done: 0, total: validShipments.length });
+
+    try {
+      await onImport(validShipments);
+      handleClose();
+      toast.success(`Successfully imported ${validShipments.length} shipment(s)`);
+    } catch (error) {
+      toast.error('Failed to import shipments');
+      console.error(error);
+    } finally {
+      setImporting(false);
+      setProgress(null);
+    }
   };
 
   const handleClose = () => {

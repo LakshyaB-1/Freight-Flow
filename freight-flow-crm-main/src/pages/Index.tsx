@@ -95,10 +95,9 @@ const Index = () => {
   }, [shipments, searchTerm, statusFilter]);
 
   const handleAddShipment = async (data: ShipmentFormData) => { await addShipment(data); setFormOpen(false); };
-  const handleImportShipments = async (importedShipments: ShipmentFormData[], onProgress?: (done: number, total: number) => void) => {
+  const handleImportShipments = async (importedShipments: ShipmentFormData[]) => {
     for (let i = 0; i < importedShipments.length; i++) {
       await addShipment(importedShipments[i]);
-      onProgress?.(i + 1, importedShipments.length);
     }
   };
   const handleEditShipment = async (data: ShipmentFormData) => {
