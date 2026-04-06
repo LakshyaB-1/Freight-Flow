@@ -81,9 +81,9 @@ const Auth = () => {
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const { error } = await resetPassword(email);
-    if (error) { || 'Failed to send reset email. Please try again.');
-      console.error('Reset password error:', error
-      setError(error.message);
+    if (error) {
+      setError(error.message || 'Failed to send reset email. Please try again.');
+      console.error('Reset password error:', error);
       setIsLoading(false);
     } else {
       setResetEmailSent(true);
