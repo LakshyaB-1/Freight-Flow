@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import ExcelJS from 'exceljs';
+import ExcelJS from 'exceljs/dist/exceljs.min.js';
 import { ShipmentFormData } from '@/types/shipment';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,9 +9,28 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Upload, FileSpreadsheet, Check, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface ExcelCell {
+  value?: unknown;
+}
+
+interface ExcelWorksheet {
+  getRow(rowNumber: number): {
+    eachCell(options: { includeEmpty: boolean }, callback: (cell: ExcelCell, colNumber: number) => void): void;
+  };
+  eachRow(
+    options: { includeEmpty: boolean },
+    callback: (
+      row: {
+        eachCell(options: { includeEmpty: boolean }, callback: (cell: ExcelCell, colNumber: number) => void): void;
+      },
+      rowNumber: number,
+    ) => void,
+  ): void;
+}
+
 
 interface ExcelImportProps {
   open: boolean;
@@ -26,13 +45,13 @@ interface ParsedRow {
 }
 
 // Convert ExcelJS worksheet to array of objects (like XLSX.utils.sheet_to_json)
-const worksheetToJson = (worksheet: ExcelJS.Worksheet): Record<string, unknown>[] => {
+const worksheetToJson = (worksheet: ExcelWorksheet): Record<string, unknown>[] => {
   const rows: Record<string, unknown>[] = [];
   const headerRow = worksheet.getRow(1);
   const headers: string[] = [];
   
   headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-    headers[colNumber - 1] = String(cell.value || '').trim(); // Adjust for 0-based indexing
+    headers[colNumber - 1] = String(cell.value ?? '').trim(); // Adjust for 0-based indexing
   });
 
   worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -84,24 +103,33 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
         
         // Try all sheets to find one with valid shipment data
         let bestJsonData: Record<string, unknown>[] = [];
-        
+
+        const isShipmentSheet = (firstRow: Record<string, unknown>) => {
+          const keys = Object.keys(firstRow).map((key) => key.toLowerCase());
+          const fieldMatchers = [
+            'consignee', 'importer', 'shipper', 'exporter',
+            'commodity', 'goods', 'product',
+            'container', 'cntr', 'container_no', 'container number',
+            'date', 'arrival', 'shipment_date', 'bldate', 'billoflading',
+            'be', 'be_no', 'billofentry', 'status', 'type', 'fcl', 'lcl',
+          ];
+          return fieldMatchers.filter((matcher) => keys.some((k) => k.includes(matcher))).length >= 2;
+        };
+
         workbook.eachSheet((worksheet) => {
           const jsonData = worksheetToJson(worksheet);
-          
-          // Check if this sheet has shipment-like columns
-          if (jsonData.length > 0) {
-            const firstRow = jsonData[0];
-            const keys = Object.keys(firstRow).map(k => k.toLowerCase());
-            const hasShipmentColumns = keys.some(k => 
-              k.includes('consignee') || k.includes('shipper') || k.includes('commodity') ||
-              k.includes('container') || k.includes('cntr') || k.includes('year') || k.includes('month')
-            );
-            
-            if (hasShipmentColumns && jsonData.length > bestJsonData.length) {
-              bestJsonData = jsonData;
-            }
+          if (jsonData.length === 0) return;
+
+          const firstRow = jsonData[0];
+          if (isShipmentSheet(firstRow) && jsonData.length > bestJsonData.length) {
+            bestJsonData = jsonData;
           }
         });
+
+        if (bestJsonData.length === 0 && workbook.worksheets.length > 0) {
+          // Fallback: use the first sheet if nothing obvious matched
+          bestJsonData = worksheetToJson(workbook.worksheets[0]);
+        }
 
         if (bestJsonData.length === 0) {
           toast.error('No shipment data found in the Excel file');
@@ -310,9 +338,6 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
     const currentStatus = String(getValue(['curentstatus', 'currentstatus', 'current_status', 'remarks', 'notes', 'comment', 'remark', 'statusremarks', 'detail', 'statausremarks']) || '').trim();
     
     const iecNo = String(getValue(['iecno', 'iec_no', 'iec', 'iecnumber', 'ieccode', 'importercode']) || '').trim();
-    
-    const mbl = String(getValue(['mbl', 'masterbilloflading', 'masterbl']) || '').trim();
-    const hbl = String(getValue(['hbl', 'housebilloflading', 'housebl', 'hawb']) || '').trim();
 
     if (!date) errors.push('Date is required (or YEAR + MONTH columns)');
     if (!consignee) errors.push('Consignee is required');
@@ -370,8 +395,8 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
       });
       handleClose();
       toast.success(`Successfully imported ${validShipments.length} shipment(s)`);
-    } catch (error: any) {
-      const message = error?.message || 'Failed to import shipments';
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to import shipments';
       toast.error(message);
       console.error('Failed to import shipments:', error);
     } finally {

@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useUserRole, AppRole } from '@/hooks/useUserRole';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '../integrations/supabase/client';
+import { useUserRole, AppRole } from '../hooks/useUserRole';
+import { Badge } from './ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { ScrollArea } from './ui/scroll-area';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from './ui/select';
 import {
   Table,
   TableBody,
@@ -19,8 +18,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { useToast } from '@/hooks/use-toast';
+} from './ui/table';
+import { useToast } from '../hooks/use-toast';
 import { Loader2, Shield, User, Users } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -65,11 +64,12 @@ const AdminUserManagement = () => {
       });
 
       setUsers(combined);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load users';
       console.error('Error fetching users:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load users',
+        description: message,
         variant: 'destructive',
       });
     } finally {
@@ -99,11 +99,12 @@ const AdminUserManagement = () => {
       });
 
       await fetchUsers();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to update role';
       console.error('Error updating role:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: message,
         variant: 'destructive',
       });
     } finally {
