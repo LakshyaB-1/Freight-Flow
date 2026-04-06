@@ -43,28 +43,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (email: string, password: string, companyName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          company_name: companyName || null,
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            company_name: companyName || null,
+          }
         }
+      });
+      if (!error) {
+        sessionStorage.setItem('crm_just_signed_up', 'true');
       }
-    });
-    if (!error) {
-      sessionStorage.setItem('crm_just_signed_up', 'true');
+      return { error };
+    } catch (err) {
+      console.error('SignUp error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to sign up. Please check your internet connection and try again.';
+      return { error: new Error(errorMsg) as any };
     }
-    return { error };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      return { error };
+    } catch (err) {
+      console.error('SignIn error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to sign in. Please check your internet connection and try again.';
+      return { error: new Error(errorMsg) as any };
+    }
   };
 
   const signOut = async () => {
@@ -74,10 +86,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const resetPassword = async (email: string) => {
     const redirectUrl = `${window.location.origin}/reset-password`;
     
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: redirectUrl,
-    });
-    return { error };
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+      return { error };
+    } catch (err) {
+      console.error('Reset password error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to send reset email. Please check your internet connection and try again.';
+      return { error: new Error(errorMsg) as any };
+    }
   };
 
   const updatePassword = async (newPassword: string) => {

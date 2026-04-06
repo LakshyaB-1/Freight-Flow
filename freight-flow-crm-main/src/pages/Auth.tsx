@@ -35,7 +35,8 @@ const Auth = () => {
     const password = formData.get('password') as string;
     const { error } = await signIn(email, password);
     if (error) {
-      setError(error.message);
+      setError(error.message || 'Failed to sign in. Please try again.');
+      console.error('Login error:', error);
       setIsLoading(false);
     } else {
       toast.success('Welcome back!');
@@ -64,7 +65,8 @@ const Auth = () => {
     }
     const { error } = await signUp(email, password, companyName);
     if (error) {
-      setError(error.message);
+      setError(error.message || 'Failed to create account. Please try again.');
+      console.error('Sign up error:', error);
       setIsLoading(false);
     } else {
       toast.success('Account created! Please check your email to verify your account.');
@@ -79,7 +81,8 @@ const Auth = () => {
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const { error } = await resetPassword(email);
-    if (error) {
+    if (error) { || 'Failed to send reset email. Please try again.');
+      console.error('Reset password error:', error
       setError(error.message);
       setIsLoading(false);
     } else {
