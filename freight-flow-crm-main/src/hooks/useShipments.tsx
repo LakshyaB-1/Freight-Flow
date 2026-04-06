@@ -62,6 +62,8 @@ const mapFormToRow = (data: ShipmentFormData | Partial<ShipmentFormData>, userId
   return row;
 };
 
+const SHIPMENTS_TABLE = 'shipments';
+
 export const useShipments = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -71,7 +73,7 @@ export const useShipments = () => {
     queryKey: ['shipments'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('shipments')
+        .from(SHIPMENTS_TABLE)
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -87,7 +89,7 @@ export const useShipments = () => {
     mutationFn: async (formData: ShipmentFormData) => {
       if (!user) throw new Error('Not authenticated');
       const row = mapFormToRow(formData, user.id);
-      const { error } = await supabase.from('shipments').insert(row);
+      const { error } = await supabase.from(SHIPMENTS_TABLE).insert(row);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -102,7 +104,7 @@ export const useShipments = () => {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data: formData, oldCurrentStatus }: { id: string; data: Partial<ShipmentFormData>; oldCurrentStatus?: string | null }) => {
       const row = mapFormToRow(formData);
-      const { error } = await supabase.from('shipments').update(row).eq('id', id);
+      const { error } = await supabase.from(SHIPMENTS_TABLE).update(row).eq('id', id);
       if (error) throw error;
       return { id, formData, oldCurrentStatus };
     },
@@ -137,7 +139,7 @@ export const useShipments = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('shipments').delete().eq('id', id);
+      const { error } = await supabase.from(SHIPMENTS_TABLE).delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -194,13 +196,13 @@ export const useShipments = () => {
       for (let i = 0; i < total; i += BULK_BATCH_SIZE) {
         const batch = rows.slice(i, i + BULK_BATCH_SIZE);
         const batchNumber = Math.floor(i / BULK_BATCH_SIZE) + 1;
-        const { error } = await supabase.from('shipments').insert(batch);
+        const { error } = await supabase.from(SHIPMENTS_TABLE).insert(batch);
 
         if (error) {
           console.warn(`Batch ${batchNumber} failed, falling back to single-row inserts`, error);
           for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
             const row = batch[rowIndex];
-            const { error: rowError } = await supabase.from('shipments').insert([row]);
+            const { error: rowError } = await supabase.from(SHIPMENTS_TABLE).insert([row]);
             if (rowError) {
               errors.push({
                 batch: batchNumber,
@@ -242,7 +244,7 @@ export const useShipments = () => {
       queryClient.setQueryData(['shipments'], (old: Shipment[] | undefined) =>
         old ? old.filter((s) => !ids.includes(s.id || '')) : [],
       );
-      const { error } = await supabase.from('shipments').delete().in('id', ids);
+      const { error } = await supabase.from(SHIPMENTS_TABLE).delete().in('id', ids);
       if (error) {
         toast.error('Failed to delete shipments: ' + error.message);
         queryClient.invalidateQueries({ queryKey: ['shipments'] }); // rollback

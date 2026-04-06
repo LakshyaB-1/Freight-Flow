@@ -104,7 +104,8 @@ const Index = () => {
     }
     const result = await bulkAddShipments(importedShipments, onProgress);
     if (result.errors.length > 0) {
-      throw new Error(`${result.errors.length} batch failure(s)`);
+      const errorMessages = result.errors.map((err) => `Batch ${err.batch}${err.row ? ` row ${err.row}` : ''}: ${err.message}`);
+      throw new Error(`${result.errors.length} error(s): ${errorMessages.join(' | ')}`);
     }
   };
   const handleEditShipment = async (data: ShipmentFormData) => {

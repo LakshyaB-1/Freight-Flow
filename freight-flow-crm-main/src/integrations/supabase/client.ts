@@ -20,5 +20,8 @@ export const supabase = createClient<Database>(SUPABASE_URL || '', SUPABASE_PUBL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
+  db: {
+    schema: 'public',
+  },
 });
