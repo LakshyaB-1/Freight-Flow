@@ -1,4 +1,4 @@
-import { useState, useCallback,useref } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -53,6 +53,7 @@ const mapFormToRow = (data: ShipmentFormData | Partial<ShipmentFormData>, userId
   if (data.weight !== undefined) row.weight = data.weight;
   if (data.cbm !== undefined) row.cbm = data.cbm;
   if (data.status !== undefined) row.status = data.status?.toLowerCase();
+  else row.status = 'pending';
   if (data.beNo !== undefined) row.be_no = data.beNo || null;
   if (data.beDate !== undefined) row.be_date = data.beDate || null;
   if (data.currentStatus !== undefined) row.current_status = data.currentStatus || null;
@@ -188,23 +189,47 @@ export const useShipments = () => {
       const rows = shipments.map((s) => mapFormToRow(s, user.id));
       const total = rows.length;
       let inserted = 0;
-      const errors: { batch: number; message: string }[] = [];
+      const errors: { batch: number; row?: number; message: string }[] = [];
+
       for (let i = 0; i < total; i += BULK_BATCH_SIZE) {
         const batch = rows.slice(i, i + BULK_BATCH_SIZE);
+        const batchNumber = Math.floor(i / BULK_BATCH_SIZE) + 1;
         const { error } = await supabase.from('shipments').insert(batch);
+
         if (error) {
-          errors.push({ batch: Math.floor(i / BULK_BATCH_SIZE) + 1, message: error.message });
+          console.warn(`Batch ${batchNumber} failed, falling back to single-row inserts`, error);
+          for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
+            const row = batch[rowIndex];
+            const { error: rowError } = await supabase.from('shipments').insert([row]);
+            if (rowError) {
+              errors.push({
+                batch: batchNumber,
+                row: rowIndex + 1,
+                message: rowError.message || 'Unknown row insert error',
+              });
+              console.error(`Row ${rowIndex + 1} in batch ${batchNumber} failed:`, rowError);
+            } else {
+              inserted += 1;
+            }
+            onProgress?.(Math.min(i + rowIndex + 1, total), total);
+          }
         } else {
           inserted += batch.length;
+          onProgress?.(Math.min(i + batch.length, total), total);
         }
-        onProgress?.(Math.min(i + batch.length, total), total);
       }
+
       queryClient.invalidateQueries({ queryKey: ['shipments'] });
+
       if (errors.length > 0) {
-        toast.error(`${errors.length} batch(es) failed. ${inserted}/${total} shipments imported.`);
+        const firstError = errors[0];
+        toast.error(
+          `${errors.length} row(s) failed to import. ${inserted}/${total} shipments imported. ${firstError.message}`,
+        );
       } else {
         toast.success(`All ${inserted} shipments imported successfully`);
       }
+
       return { inserted, errors };
     },
     [user, queryClient],
