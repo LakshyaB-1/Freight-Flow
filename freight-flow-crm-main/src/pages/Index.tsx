@@ -50,7 +50,7 @@ const TabFallback = () => (
 );
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
-  const { shipments, loading: shipmentsLoading, addShipment, updateShipment, deleteShipment } = useShipments();
+  const { shipments, loading: shipmentsLoading, addShipment, updateShipment, deleteShipment, bulkAddShipments } = useShipments();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const isMobile = useIsMobile();
 
@@ -95,9 +95,16 @@ const Index = () => {
   }, [shipments, searchTerm, statusFilter]);
 
   const handleAddShipment = async (data: ShipmentFormData) => { await addShipment(data); setFormOpen(false); };
-  const handleImportShipments = async (importedShipments: ShipmentFormData[]) => {
-    for (let i = 0; i < importedShipments.length; i++) {
-      await addShipment(importedShipments[i]);
+  const handleImportShipments = async (
+    importedShipments: ShipmentFormData[],
+    onProgress?: (done: number, total: number) => void,
+  ) => {
+    if (!bulkAddShipments) {
+      throw new Error('Bulk import is not available');
+    }
+    const result = await bulkAddShipments(importedShipments, onProgress);
+    if (result.errors.length > 0) {
+      throw new Error(`${result.errors.length} batch failure(s)`);
     }
   };
   const handleEditShipment = async (data: ShipmentFormData) => {

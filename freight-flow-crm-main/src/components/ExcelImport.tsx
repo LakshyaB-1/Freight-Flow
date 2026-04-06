@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 interface ExcelImportProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImport: (shipments: ShipmentFormData[]) => void;
+  onImport: (shipments: ShipmentFormData[], onProgress?: (done: number, total: number) => void) => Promise<void>;
 }
 
 interface ParsedRow {
@@ -365,12 +365,15 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
     setProgress({ done: 0, total: validShipments.length });
 
     try {
-      await onImport(validShipments);
+      await onImport(validShipments, (done, total) => {
+        setProgress({ done, total });
+      });
       handleClose();
       toast.success(`Successfully imported ${validShipments.length} shipment(s)`);
-    } catch (error) {
-      toast.error('Failed to import shipments');
-      console.error(error);
+    } catch (error: any) {
+      const message = error?.message || 'Failed to import shipments';
+      toast.error(message);
+      console.error('Failed to import shipments:', error);
     } finally {
       setImporting(false);
       setProgress(null);
