@@ -69,7 +69,7 @@ const Auth = () => {
       console.error('Sign up error:', error);
       setIsLoading(false);
     } else {
-      toast.success('Account created! Please check your email to verify your account.');
+      toast.success('Account created! You can now sign in.');
       setIsLoading(false);
     }
   };
