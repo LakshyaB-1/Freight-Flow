@@ -62,6 +62,43 @@ const mapFormToRow = (data: ShipmentFormData | Partial<ShipmentFormData>, userId
   return row;
 };
 
+const getAuthenticatedUserId = async () => {
+  const [sessionResult, userResult] = await Promise.all([
+    supabase.auth.getSession(),
+    supabase.auth.getUser(),
+  ]);
+
+  console.log('Supabase auth session result:', sessionResult);
+  console.log('Supabase auth user result:', userResult);
+
+  const sessionError = sessionResult.error;
+  if (sessionError) {
+    console.error('Supabase session lookup failed:', sessionError);
+    throw sessionError;
+  }
+
+  const authUserId = sessionResult.data.session?.user?.id;
+  const accessToken = sessionResult.data.session?.access_token;
+  const refreshToken = sessionResult.data.session?.refresh_token;
+
+  if (!authUserId) {
+    throw new Error('Authentication session is missing. Please sign in again.');
+  }
+
+  if (accessToken) {
+    const { error: setSessionError } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken ?? undefined,
+    });
+    if (setSessionError) {
+      console.error('Supabase auth.setSession failed:', setSessionError);
+      throw setSessionError;
+    }
+  }
+
+  return authUserId;
+};
+
 const SHIPMENTS_TABLE = 'shipments';
 
 export const useShipments = () => {
@@ -87,8 +124,8 @@ export const useShipments = () => {
 
   const createMutation = useMutation({
     mutationFn: async (formData: ShipmentFormData) => {
-      if (!user) throw new Error('Not authenticated');
-      const row = mapFormToRow(formData, user.id);
+      const authUserId = await getAuthenticatedUserId();
+      const row = mapFormToRow(formData, authUserId);
       const { error } = await supabase.from(SHIPMENTS_TABLE).insert(row);
       if (error) throw error;
     },
@@ -187,8 +224,26 @@ export const useShipments = () => {
       shipments: ShipmentFormData[],
       onProgress?: (done: number, total: number) => void,
     ) => {
-      if (!user) throw new Error('Not authenticated');
-      const rows = shipments.map((s) => mapFormToRow(s, user.id));
+      const authUserId = await getAuthenticatedUserId();
+
+      const rows = shipments.map((s) => {
+        const row = mapFormToRow(s, authUserId);
+        if (!row.user_id) {
+          throw new Error('Missing user_id for shipment import. Please sign in again.');
+        }
+        return row;
+      });
+
+      console.log('Bulk import auth info', {
+        authUserId,
+        currentContextUserId: user?.id,
+        firstRowUserId: rows[0]?.user_id,
+        rowCount: rows.length,
+      });
+
+      const batchInsertOptions = { returning: 'minimal' as const };
+
+
       const total = rows.length;
       let inserted = 0;
       const errors: { batch: number; row?: number; message: string }[] = [];
@@ -196,18 +251,19 @@ export const useShipments = () => {
       for (let i = 0; i < total; i += BULK_BATCH_SIZE) {
         const batch = rows.slice(i, i + BULK_BATCH_SIZE);
         const batchNumber = Math.floor(i / BULK_BATCH_SIZE) + 1;
-        const { error } = await supabase.from(SHIPMENTS_TABLE).insert(batch);
+        const { error } = await supabase.from(SHIPMENTS_TABLE).insert(batch, batchInsertOptions);
 
         if (error) {
           console.warn(`Batch ${batchNumber} failed, falling back to single-row inserts`, error);
           for (let rowIndex = 0; rowIndex < batch.length; rowIndex++) {
             const row = batch[rowIndex];
-            const { error: rowError } = await supabase.from(SHIPMENTS_TABLE).insert([row]);
+            const { error: rowError } = await supabase.from(SHIPMENTS_TABLE).insert([row], batchInsertOptions);
             if (rowError) {
+              const message = rowError.message || 'Unknown row insert error';
               errors.push({
                 batch: batchNumber,
                 row: rowIndex + 1,
-                message: rowError.message || 'Unknown row insert error',
+                message,
               });
               console.error(`Row ${rowIndex + 1} in batch ${batchNumber} failed:`, rowError);
             } else {
@@ -223,18 +279,19 @@ export const useShipments = () => {
 
       queryClient.invalidateQueries({ queryKey: ['shipments'] });
 
-      if (errors.length > 0) {
+      if (errors.length > 0 || inserted === 0) {
         const firstError = errors[0];
-        toast.error(
-          `${errors.length} row(s) failed to import. ${inserted}/${total} shipments imported. ${firstError.message}`,
-        );
+        const errorMessage = inserted === 0
+          ? 'No shipments were imported. Please check your login session and try again.'
+          : `${errors.length} row(s) failed to import. ${inserted}/${total} shipments imported. ${firstError.message}`;
+        toast.error(errorMessage);
       } else {
         toast.success(`All ${inserted} shipments imported successfully`);
       }
 
       return { inserted, errors };
     },
-    [user, queryClient],
+    [queryClient],
   );
   // Bulk delete — single query with IN filter
   const bulkDeleteShipments = useCallback(

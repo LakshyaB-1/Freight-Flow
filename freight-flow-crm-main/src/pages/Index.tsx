@@ -107,6 +107,7 @@ const Index = () => {
       const errorMessages = result.errors.map((err) => `Batch ${err.batch}${err.row ? ` row ${err.row}` : ''}: ${err.message}`);
       throw new Error(`${result.errors.length} error(s): ${errorMessages.join(' | ')}`);
     }
+    return result;
   };
   const handleEditShipment = async (data: ShipmentFormData) => {
     if (!editingShipment) return;
