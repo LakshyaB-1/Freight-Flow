@@ -74,14 +74,20 @@ const InsightsDashboard = ({ shipments }: InsightsDashboardProps) => {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: 'Give me a daily insights summary including at-risk shipments, key stats, and top recommendations. Be concise.' }],
         }),
       });
 
-      if (!resp.ok || !resp.body) {
-        throw new Error('Failed to get AI insights');
+      if (!resp.ok) {
+        const errorBody = await resp.json().catch(() => null);
+        throw new Error(errorBody?.error || `Failed to get AI insights (${resp.status})`);
+      }
+
+      if (!resp.body) {
+        throw new Error('Failed to get AI insights: response stream missing');
       }
 
       const reader = resp.body.getReader();

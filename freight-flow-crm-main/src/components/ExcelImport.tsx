@@ -45,24 +45,44 @@ interface ParsedRow {
 
 const worksheetToJson = (worksheet: ExcelWorksheet): Record<string, unknown>[] => {
   const rows: Record<string, unknown>[] = [];
-  const headerRow = worksheet.getRow(1);
   const headers: string[] = [];
 
+  const headerRowNumber = (() => {
+    const maxHeaderRow = Math.min(10, (worksheet as any).rowCount || 10);
+    for (let rowNumber = 1; rowNumber <= maxHeaderRow; rowNumber += 1) {
+      const row = worksheet.getRow(rowNumber);
+      let nonEmptyCount = 0;
+      row.eachCell({ includeEmpty: false }, (cell) => {
+        const rawValue = cell.value;
+        if (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') {
+          nonEmptyCount += 1;
+        }
+      });
+      if (nonEmptyCount >= 3) {
+        return rowNumber;
+      }
+    }
+    return 1;
+  })();
+
+  const headerRow = worksheet.getRow(headerRowNumber);
   headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
     headers[colNumber - 1] = String(cell.value ?? '').trim();
   });
 
   worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber === 1) return;
+    if (rowNumber <= headerRowNumber) return;
     const obj: Record<string, unknown> = {};
     let hasValue = false;
 
-    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       const header = headers[colNumber - 1];
-      if (header) {
-        obj[header] = cell.value;
+      if (!header) return;
+      const value = cell?.value;
+      if (value !== null && value !== undefined && String(value).trim() !== '') {
         hasValue = true;
       }
+      obj[header] = value;
     });
 
     if (hasValue) rows.push(obj);
@@ -158,26 +178,32 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
     if (!data.commodity) errors.push('Commodity missing');
     if (!data.date) errors.push('Date missing');
 
+    const hasAnyValue = Object.values(data).some((value) => {
+      if (value === null || value === undefined) return false;
+      if (typeof value === 'number') return !Number.isNaN(value) && value !== 0;
+      return String(value).trim() !== '';
+    });
+
     return {
       data,
-      valid: errors.length === 0,
+      valid: hasAnyValue,
       errors,
     };
   };
 
   const handleImport = async () => {
-    const validShipments = parsedData.filter((row) => row.valid).map((row) => row.data);
+    const allShipments = parsedData.map((row) => row.data);
 
-    if (!validShipments.length) {
-      toast.error('No valid shipments to import');
+    if (!allShipments.length) {
+      toast.error('No shipments to import');
       return;
     }
 
     setImporting(true);
-    setProgress({ done: 0, total: validShipments.length });
+    setProgress({ done: 0, total: allShipments.length });
 
     try {
-      const result = await onImport(validShipments, (done, total) => {
+      const result = await onImport(allShipments, (done, total) => {
         setProgress({ done, total });
       });
 
@@ -352,11 +378,11 @@ const ExcelImport = ({ open, onOpenChange, onImport }: ExcelImportProps) => {
                 <Button variant="outline" onClick={handleClose} disabled={importing}>
                   Cancel
                 </Button>
-                <Button onClick={handleImport} disabled={validCount === 0 || importing} className="gap-2">
+                <Button onClick={handleImport} disabled={parsedData.length === 0 || importing} className="gap-2">
                   {importing ? (
                     <><Loader2 className="h-4 w-4 animate-spin" />Importing…</>
                   ) : (
-                    <><Check className="h-4 w-4" />Import {validCount} Shipment{validCount !== 1 ? 's' : ''}</>
+                    <><Check className="h-4 w-4" />Import {parsedData.length} Shipment{parsedData.length !== 1 ? 's' : ''}</>
                   )}
                 </Button>
               </div>

@@ -25,8 +25,14 @@ export const useUserRole = () => {
           .maybeSingle();
 
         if (error) {
-          console.error('Error fetching user role:', error);
-          setRole('user');
+          // Table might not exist yet, which is ok - default to 'user' role
+          if (error.code === 'PGRST205' || error.message?.includes("Could not find the table")) {
+            console.warn('user_roles table not found, using default user role');
+            setRole('user');
+          } else {
+            console.error('Error fetching user role:', error);
+            setRole('user');
+          }
         } else if (data) {
           setRole(data.role as AppRole);
         } else {

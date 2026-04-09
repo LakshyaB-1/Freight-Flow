@@ -1,5 +1,3 @@
-/// <reference lib="deno.ns" />
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.86.2";
 
@@ -9,233 +7,193 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+type ChatMsg = { role: "user" | "assistant"; content: string };
+
+function sseFromText(fullText: string) {
+  // The frontend parses an OpenAI-style streamed SSE payload:
+  // data: {"choices":[{"delta":{"content":"..."}}]}
+  const encoder = new TextEncoder();
+  const chunkSize = 64;
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (let i = 0; i < fullText.length; i += chunkSize) {
+        const chunk = fullText.slice(i, i + chunkSize);
+        const payload = JSON.stringify({ choices: [{ delta: { content: chunk } }] });
+        controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+}
+
+async function generateWithGemini(args: {
+  apiKey: string;
+  systemPrompt: string;
+  messages: ChatMsg[];
+}) {
+  // Uses Google Generative Language API (Gemini). We keep it non-streaming here,
+  // then adapt it into an SSE stream the frontend already understands.
+  const { apiKey, systemPrompt, messages } = args;
+
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const contents = (messages || []).map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: {
+        temperature: 0.4,
+        topP: 0.95,
+        maxOutputTokens: 1024,
+      },
+    }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Gemini error (${resp.status}): ${text || resp.statusText}`);
   }
 
-  try {
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
+  const data = await resp.json();
+  const parts: Array<{ text?: string }> =
+    data?.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.map((p) => p.text ?? "").join("");
+  return text || "";
+}
 
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const { messages, action, shipmentId } = await req.json();
+
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
+
+    const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Require authentication
-    const authHeader = req.headers.get("Authorization");
-
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-
-    const anonClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data, error: claimsError } = await anonClient.auth.getClaims(token);
-
-    if (claimsError || !data?.claims) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const userId = data.claims.sub as string;
-
-    // Validate request body
-    let body: unknown;
-
-    try {
-      body = await req.json();
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid JSON body" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (typeof body !== "object" || body === null) {
-      return new Response(
-        JSON.stringify({ error: "Request body must be an object" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { messages, action, shipmentId } = body as Record<string, unknown>;
-
-    // Validate messages
-    if (messages !== undefined && !Array.isArray(messages)) {
-      return new Response(
-        JSON.stringify({ error: "'messages' must be an array" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (Array.isArray(messages) && messages.length > 50) {
-      return new Response(
-        JSON.stringify({ error: "Too many messages (max 50)" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Validate action
-    const allowedActions = [
-      "insights",
-      "summarize",
-      "draft_email",
-      "suggest_actions",
-    ];
-
-    if (
-      action !== undefined &&
-      (typeof action !== "string" || !allowedActions.includes(action))
-    ) {
-      return new Response(
-        JSON.stringify({ error: "Invalid action" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Validate shipmentId
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-    if (
-      shipmentId !== undefined &&
-      shipmentId !== null &&
-      (typeof shipmentId !== "string" || !uuidRegex.test(shipmentId))
-    ) {
-      return new Response(
-        JSON.stringify({ error: "Invalid shipmentId format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch shipment context
+    // Get user from auth
+    let userId: string | null = null;
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
+      const { data: { user } } = await anonClient.auth.getUser(token);
+      userId = user?.id || null;
+    }
+
+    // Fetch shipment context data
     let contextData = "";
 
-    const { data: shipments } = await supabase
-      .from("shipments")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(50);
+    if (userId) {
+      // Fetch shipments
+      const { data: shipments } = await supabase
+        .from("shipments")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-    if (shipments && shipments.length > 0) {
-      contextData += `\n\n## Current Shipments (${shipments.length} total):\n`;
+      if (shipments && shipments.length > 0) {
+        contextData += `\n\n## Current Shipments (${shipments.length} total):\n`;
+        for (const s of shipments) {
+          contextData += `- ID: ${s.id} | Consignee: ${s.consignee} | Shipper: ${s.shipper} | Commodity: ${s.commodity} | Status: ${s.status || 'PENDING'} | Container: ${s.container_no || 'N/A'} | Date: ${s.date} | BE No: ${s.be_no || 'N/A'} | Current Status: ${s.current_status || 'N/A'}\n`;
+        }
 
-      for (const s of shipments) {
-        contextData += `- ID: ${s.id} | Consignee: ${s.consignee} | Shipper: ${s.shipper} | Commodity: ${s.commodity} | Status: ${s.status || "PENDING"} | Container: ${s.container_no || "N/A"} | Date: ${s.date} | BE No: ${s.be_no || "N/A"} | Current Status: ${s.current_status || "N/A"}\n`;
-      }
+        // If specific shipment requested, get milestones
+        if (shipmentId) {
+          const { data: milestones } = await supabase
+            .from("shipment_milestones")
+            .select("*")
+            .eq("shipment_id", shipmentId);
 
-      if (shipmentId) {
-        const { data: milestones } = await supabase
-          .from("shipment_milestones")
-          .select("*")
-          .eq("shipment_id", shipmentId as string);
+          if (milestones && milestones.length > 0) {
+            contextData += `\n## Milestones for shipment ${shipmentId}:\n`;
+            for (const m of milestones) {
+              contextData += `- ${m.milestone_type}: ${m.status} | Date: ${m.milestone_date || 'Not set'} | Notes: ${m.notes || 'None'}\n`;
+            }
+          }
 
-        if (milestones && milestones.length > 0) {
-          contextData += `\n## Milestones for shipment ${shipmentId}:\n`;
+          const { data: docs } = await supabase
+            .from("shipment_documents")
+            .select("*")
+            .eq("shipment_id", shipmentId);
 
-          for (const m of milestones) {
-            contextData += `- ${m.milestone_type}: ${m.status} | Date: ${m.milestone_date || "Not set"} | Notes: ${m.notes || "None"}\n`;
+          if (docs && docs.length > 0) {
+            contextData += `\n## Documents for shipment ${shipmentId}:\n`;
+            for (const d of docs) {
+              contextData += `- ${d.file_name} (${d.document_type || 'other'}) uploaded ${d.created_at}\n`;
+            }
           }
         }
 
-        const { data: docs } = await supabase
-          .from("shipment_documents")
-          .select("*")
-          .eq("shipment_id", shipmentId as string);
+        // Compute insights
+        const pending = shipments.filter((s: any) => (s.status || '').toLowerCase() === 'pending');
+        const done = shipments.filter((s: any) => (s.status || '').toLowerCase() === 'done');
+        contextData += `\n## Quick Stats:\n- Total: ${shipments.length} | Pending: ${pending.length} | Completed: ${done.length}\n`;
 
-        if (docs && docs.length > 0) {
-          contextData += `\n## Documents for shipment ${shipmentId}:\n`;
+        // Check for potential delays (shipments pending for >14 days)
+        const now = new Date();
+        const atRisk = pending.filter((s: any) => {
+          const created = new Date(s.created_at);
+          const days = (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+          return days > 14;
+        });
 
-          for (const d of docs) {
-            contextData += `- ${d.file_name} (${d.document_type || "other"}) uploaded ${d.created_at}\n`;
+        if (atRisk.length > 0) {
+          contextData += `\n## ⚠️ At-Risk Shipments (pending >14 days):\n`;
+          for (const s of atRisk) {
+            const days = Math.round((now.getTime() - new Date(s.created_at).getTime()) / (1000 * 60 * 60 * 24));
+            contextData += `- ${s.consignee} / ${s.commodity} — pending for ${days} days\n`;
           }
         }
       }
-
-      const pending = shipments.filter(
-        (s: any) => (s.status || "").toLowerCase() === "pending"
-      );
-
-      const done = shipments.filter(
-        (s: any) => (s.status || "").toLowerCase() === "done"
-      );
-
-      contextData += `\n## Quick Stats:\n- Total: ${shipments.length} | Pending: ${pending.length} | Completed: ${done.length}\n`;
     }
 
-    const systemPrompt = `
-You are the AI logistics assistant for Freight Link Logistics Systems CRM.
+    const systemPrompt = `You are an AI assistant for Freight Link Logistics, a freight forwarding and customs clearance CRM. You have access to the user's shipment, milestone, and document data.
 
-Capabilities:
-1. Summarize shipment status
-2. Draft professional customer emails
-3. Suggest next operational actions
-4. Highlight delayed shipments
-5. Provide logistics insights
+Your capabilities:
+1. Summarize shipment status in plain, professional language
+2. Draft professional customer emails for delays, updates, or confirmations
+3. Suggest next actions based on shipment status and milestones
+4. Highlight shipments at risk of delay
+5. Provide insights about the logistics operation
 
-${contextData}
-`;
+When drafting emails, use a professional business tone and include relevant shipment details.
+When summarizing, be concise but thorough.
+When suggesting actions, be specific and actionable.
 
-    const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...(Array.isArray(messages) ? messages : []),
-          ],
-          stream: true,
-        }),
-      }
-    );
+${action === 'insights' ? 'The user is requesting a daily insights summary. Analyze all data and provide: 1) Shipments at risk of delay, 2) Key statistics, 3) Recommended actions.' : ''}
 
-    if (!response.ok) {
-      console.error("AI API error:", response.status);
+Here is the current data context:
+${contextData}`;
 
-      return new Response(
-        JSON.stringify({ error: "AI service error" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
+    const geminiText = await generateWithGemini({
+      apiKey: GEMINI_API_KEY,
+      systemPrompt,
+      messages: (messages || []) as ChatMsg[],
+    });
 
-    return new Response(response.body, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-      },
+    return new Response(sseFromText(geminiText), {
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("AI assistant error:", e);
-
+    console.error("ai-assistant error:", e);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -63,6 +64,7 @@ const AIAssistantPanel = ({ shipmentId }: AIAssistantPanelProps) => {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
       },
       body: JSON.stringify({
         messages: userMessages,
@@ -71,8 +73,15 @@ const AIAssistantPanel = ({ shipmentId }: AIAssistantPanelProps) => {
     });
 
     if (!resp.ok) {
-      const errData = await resp.json().catch(() => ({}));
-      throw new Error(errData.error || `Request failed (${resp.status})`);
+      const text = await resp.text().catch(() => 'Unable to read error body');
+      let message = text;
+      try {
+        const errData = JSON.parse(text);
+        message = errData.error || errData.message || text;
+      } catch {
+        // keep raw body
+      }
+      throw new Error(message || `Request failed (${resp.status})`);
     }
 
     if (!resp.body) throw new Error('No response stream');
@@ -191,6 +200,7 @@ const AIAssistantPanel = ({ shipmentId }: AIAssistantPanelProps) => {
               Powered by AI
             </Badge>
           </SheetTitle>
+          <SheetDescription>Ask the AI assistant about your shipments and get logistics insights</SheetDescription>
         </SheetHeader>
 
         {/* Messages */}
