@@ -7,70 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type ChatMsg = { role: "user" | "assistant"; content: string };
-
-function sseFromText(fullText: string) {
-  // The frontend parses an OpenAI-style streamed SSE payload:
-  // data: {"choices":[{"delta":{"content":"..."}}]}
-  const encoder = new TextEncoder();
-  const chunkSize = 64;
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (let i = 0; i < fullText.length; i += chunkSize) {
-        const chunk = fullText.slice(i, i + chunkSize);
-        const payload = JSON.stringify({ choices: [{ delta: { content: chunk } }] });
-        controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-      }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      controller.close();
-    },
-  });
-}
-
-async function generateWithGemini(args: {
-  apiKey: string;
-  systemPrompt: string;
-  messages: ChatMsg[];
-}) {
-  // Uses Google Generative Language API (Gemini). We keep it non-streaming here,
-  // then adapt it into an SSE stream the frontend already understands.
-  const { apiKey, systemPrompt, messages } = args;
-
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-  const contents = (messages || []).map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      generationConfig: {
-        temperature: 0.4,
-        topP: 0.95,
-        maxOutputTokens: 1024,
-      },
-    }),
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`Gemini error (${resp.status}): ${text || resp.statusText}`);
-  }
-
-  const data = await resp.json();
-  const parts: Array<{ text?: string }> =
-    data?.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.map((p) => p.text ?? "").join("");
-  return text || "";
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -180,13 +116,31 @@ ${action === 'insights' ? 'The user is requesting a daily insights summary. Anal
 Here is the current data context:
 ${contextData}`;
 
-    const geminiText = await generateWithGemini({
-      apiKey: GEMINI_API_KEY,
-      systemPrompt,
-      messages: (messages || []) as ChatMsg[],
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...(Array.isArray(messages) ? messages : []),
+        ],
+        stream: true,
+      }),
     });
 
-    return new Response(sseFromText(geminiText), {
+    if (!response.ok) {
+      console.error("AI gateway error:", response.status);
+      return new Response(JSON.stringify({ error: "AI service error" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
