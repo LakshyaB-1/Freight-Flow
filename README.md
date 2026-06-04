@@ -22,7 +22,7 @@ The system provides a centralized dashboard for tracking shipments, monitoring o
 
 ### 🤖 AI Logistics Assistant
 
-Powered by OpenAI, the AI assistant can:
+Powered by Gemini, the AI assistant can:
 
 * Summarize shipment statuses
 * Generate logistics insights
